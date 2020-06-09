@@ -1,0 +1,416 @@
+---
+title: 'Tipología y ciclo de vida de los datos PRA2'
+author: "Autor: Alejandro De La Concha"
+date: "Junio 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 75.584-PEC-header.html
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(eval=T, echo=T)
+
+```
+
+```{r message= FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library (C50)
+
+```
+
+
+>Utilizaré nuevamente el dataset de censo de EEUU para poder revisar los factores que influyen en el salario, el salario puede ser <=50K USD o >50K
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Cargamos el juego de datos (convertido) de forma local, en lugar de ir a la URL de la PEC1
+datosAdult <- read.csv("./adult.data.converted.csv",stringsAsFactors = FALSE, header = FALSE)
+
+# Nombres de los atributos (reducidos de 15 a 11 columnas)
+names(datosAdult) <- c("age","workclass","education_num","marital_status","occupation","relationship","race","sex","hour_per_week","native_country","income")
+
+```
+
+>Empezaremos haciendo un breve análisis de los datos ya que nos interesa tener una idea general de los datos que disponemos. Por ello, primero calcularemos las dimensiones de nuestra base de datos y analizaremos qué tipos de atributos tenemos.
+
+>Para empezar, calculamos las dimensiones de la base de datos mediante la función dim(). Obtenemos que disponemos de 32561 registros o personas (filas) y 11 variables (columnas). 
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dim(datosAdult)
+```
+
+>En el dataset original:
+>age: representa la edad y es un número entero (mayor a cero).
+>workclass es varable categórica y tiene 9 valores que representa el estado de empleo de la persona.
+>fnlwgt: es un entero que representa el número de registro en el censo, no es útil para nuestro análisis.
+>Education: 16 categorías que muestra el máximo grado de estudios de la persona
+>Education-num: Es un enetero que pone orden de menor a mayor grado de estudio, esta columna está vinculada a la anterior y podría ser redundante.
+>marital-status: 7 categorías, es el estado marital de la persona. 
+>occupation: 15 categorías con el tipo de ocupación de la persona.
+>relationship: 6 niveles con el tipo de relación, puede ser redundante con el estado marital.
+>race: 5 tipos, que representan la raza de la persona.
+>sex: 2 tipos, que representan el gñenero de la persona.
+>capital-gain: Número entero con la ganancia en capital, al haber varios con cero, esta columna puede no ser relevante.
+>capital-loss: Parecido al anterior, solo que con la pérdida en capital.
+>hours-per-week: Valor continuo con las horas que trabaja la persona.
+>native-country: 42 valores, representa el país de origen de la persona.
+>income: Si el individuo gana <=50K USD al año o >50K
+>
+>¿Cuáles son esas variables? Gracias a la función str():
+>age, permanece pero agrupado en grupos <20 años y después grupos de 5 en 5 hasta >75
+>workclass permanece igual
+>education_num, permanece y se quita education por ser redundante.
+>marital_estatus permanece
+>occupation, permanece
+>relationship, permanece, parecía redundante con marital_estatus, pero más adelante veremos que no podían ser descartados.
+>race y sex permanecen, race se podría simplificar un poco más.
+>hours_per_week, se agrupó en 4: 0 a 20, 20 a 40, 40 y más de 40.
+>native_country, se hicieron varias agrupaciones porque había una cantidad muy alta de países.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#cambiammos a factores para que el algoritmo pueda funcionar
+datosAdult$age<-as.factor(datosAdult$age)
+datosAdult$workclass<-as.factor(datosAdult$workclass)
+datosAdult$education_num<-as.factor(datosAdult$education_num)
+datosAdult$marital_status<-as.factor(datosAdult$marital_status)
+datosAdult$occupation<-as.factor(datosAdult$occupation)
+datosAdult$relationship<-as.factor(datosAdult$relationship)
+datosAdult$race<-as.factor(datosAdult$race)
+datosAdult$sex<-as.factor(datosAdult$sex)
+datosAdult$hour_per_week<-as.factor(datosAdult$hour_per_week)
+datosAdult$native_country<-as.factor(datosAdult$native_country)
+datosAdult$income<-as.factor(datosAdult$income)
+
+str(datosAdult)
+```
+
+>Es de gran interés saber si tenemos muchos valores nulos (campos vacíos) y la distribución de valores por variables. Es por ello recomendable empezar el análisis con una visión general de las variables. Mostraremos para cada atributo la cantidad de valores perdidos mediante la función summary.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(datosAdult)
+```
+
+>Vemos que existen valores desconocidos (representados por: Unknown).
+>
+>Nos interesa describir la relación entre el salario y cada una de las variables mencionadas anteriormente. Para ello, por un lado graficaremos mediante diagramas de barras la cantidad de personas con salario alto y bajo.
+
+
+```{r}
+
+grid.newpage()
+
+plotbyAge2<-ggplot(datosAdult,aes(age,fill=income))+coord_flip() +geom_bar() +labs(x="age", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by Age")
+plotbyworkclass<-ggplot(datosAdult,aes(workclass,fill=income))+coord_flip() +geom_bar() +labs(x="workclass", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by workclass")
+plotbyeducation_num<-ggplot(datosAdult,aes(education_num,fill=income))+coord_flip() +geom_bar() +labs(x="education_num", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by education_num")
+plotbyoccupation<-ggplot(datosAdult,aes(occupation,fill=income))+coord_flip() +geom_bar() +labs(x="occupation", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by occupation")
+
+grid.arrange(plotbyAge2, plotbyworkclass,plotbyeducation_num,plotbyoccupation,ncol=2)
+
+
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+grid.newpage()
+
+plotbymarital_status<-ggplot(datosAdult,aes(marital_status,fill=income))+coord_flip()+geom_bar() +labs(x="marital status", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by marital status")
+plotbyrelationship<-ggplot(datosAdult,aes(relationship,fill=income))+coord_flip()+geom_bar() +labs(x="relationship", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by relationship")
+plotbyrace<-ggplot(datosAdult,aes(race,fill=income))+coord_flip()+geom_bar() +labs(x="race", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("income by race")
+plotbySex2<-ggplot(datosAdult,aes(sex,fill=income))+geom_bar() +labs(x="sex", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("income by sex")
+
+grid.arrange(plotbymarital_status,plotbyrelationship,plotbyrace,plotbySex2,ncol=2)
+
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+grid.newpage()
+plotbyhour_per_week<-ggplot(datosAdult,aes(hour_per_week,fill=income))+coord_flip()+geom_bar() +labs(x="hour_per_week", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by hours per week")
+plotbynative_country<-ggplot(datosAdult,aes(native_country,fill=income))+coord_flip()+geom_bar() +labs(x="relationship", y="people")+ guides(fill=guide_legend(title=""))+ scale_fill_manual(values=c("black","#008000","black","#008000"))+ggtitle("Income by native_country")
+
+grid.arrange(plotbyhour_per_week,plotbynative_country,ncol=2)
+
+```
+
+>De estos gráficos obtenemos información muy valiosa que complementamos con las tablas de contingencia (listadas abajo). 
+
+>Hacemos tablas de contingencia de cada variable vs income en el que podemos ver el número de personas y el % que representa por cada agrupación en la variable observada.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+tabla_AIT <- table(datosAdult$age,datosAdult$income)
+tabla_AIT
+prop.table(tabla_AIT, margin = 1)
+```
+
+>age: el intervalo de edad en el que es más probable tener un salario alto es entre 40 y 60 años.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_WIT <- table(datosAdult$workclass,datosAdult$income)
+tabla_WIT
+prop.table(tabla_WIT, margin = 1)
+```
+
+>workclass: es Private en donde hay más personas pero es self-emp-inc el que más posibilidades tiene de que se acceda a un buen salario mientras que never-worked y without-pay son los que solo tienen salario bajo.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_EnIT <- table(datosAdult$education_num,datosAdult$income)
+tabla_EnIT
+prop.table(tabla_EnIT, margin = 1)
+```
+
+>education_num: A mayor educación mayor porcentaje de acceder a un salario alto.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_OIT <- table(datosAdult$occupation,datosAdult$income)
+tabla_OIT
+prop.table(tabla_OIT, margin = 1)
+```
+
+>occupation: exec-managerial es la que más posibilidades da de acceder a un salario alto, mientras que priv-house-serv es la que menos.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_MsIT <- table(datosAdult$marital_status,datosAdult$income)
+tabla_MsIT
+prop.table(tabla_MsIT, margin = 1)
+```
+
+>marital_status: married-af-spouse y married-civ-spouse son los de mayor posibilidad de acceder a un salario alto y never-married es la que menos. Hay que tener cuidado aquí con los sesgos.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_RIT <- table(datosAdult$relationship,datosAdult$income)
+tabla_RIT
+prop.table(tabla_RIT, margin = 1)
+```
+
+>relationship: Los más altos son husband y wife y el más bajo es own-child, que son consistentes con marital_status
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_RaIT <- table(datosAdult$race,datosAdult$income)
+tabla_RaIT
+prop.table(tabla_RaIT, margin = 1)
+```
+
+>race: Los de mayor probabilidad de acceder a un salario alto son Asian-Pac-Islander y Withe y other son los que menos. Al estar todos similares, habría que pensar si en bueno incluir esta variable ya que en la realidad puede crear sesgos por raza, si esto se utiliza para acceder a créditos o préstamos, puede ser un mal algoritmo.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_SIT <- table(datosAdult$sex,datosAdult$income)
+tabla_SIT
+prop.table(tabla_SIT, margin = 1)
+```
+
+>sex: male es el que más posibilidades tiene de acceder a un salario alto, igualmente este podría hacer un sesgo.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_HIT <- table(datosAdult$hour_per_week,datosAdult$income)
+tabla_HIT
+prop.table(tabla_HIT, margin = 1)
+```
+
+>hours_per_week: Los que trabajan poco tienen bajas posibilidades de acceder a un salario alto y los que trabajan mucho tienen más posibilidades.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+tabla_NIT <- table(datosAdult$native_country,datosAdult$income)
+tabla_NIT
+prop.table(tabla_NIT, margin = 1)
+```
+
+>native_country: Central Asia es el que más posibilidades tiene, aunque hay pocas personas y South America es el que menos. USA es el que tiene más personas registradas.
+
+>Los siguientes gráficos nos permiten visualizar la información mencionada más claramente.
+
+```{r}
+par(mfrow=c(1,1))
+
+plot(tabla_AIT, col = c("black","#008000"), main = "income vs. age")
+plot(tabla_WIT, col = c("black","#008000"), main = "income vs. workclass")
+plot(tabla_EnIT, col = c("black","#008000"), main = "income vs. education_num")
+plot(tabla_OIT, col = c("black","#008000"), main = "income vs. occupation")
+
+```
+
+```{r}
+par(mfrow=c(1,1))
+
+plot(tabla_MsIT, col = c("black","#008000"), main = "income vs. marital status")
+plot(tabla_RIT, col = c("black","#008000"), main = "income vs. relationship")
+plot(tabla_RaIT, col = c("black","#008000"), main = "income vs. race")
+plot(tabla_SIT, col = c("black","#008000"), main = "income vs. sex")
+
+```
+
+```{r}
+par(mfrow=c(1,1))
+
+plot(tabla_HIT, col = c("black","#008000"), main = "income vs. hours per week")
+plot(tabla_NIT, col = c("black","#008000"), main = "income vs. relationship")
+
+
+```
+
+>Nuestro objetivo es crear un árbol de decisión que permita analizar qué tipo de persona del censo  de EEUU tiene más probabilidades de acceder a un salario alto o no. Por lo tanto, la variable por la que clasificaremos es el campo de income que muestra si el salario e <=50K USD o >50K USD.
+
+```{r}
+head(datosAdult,10)
+tail(datosAdult,10)
+```
+
+>Nos interesará "desordenar" los datos. Guardaremos los datos con el nuevo nombre como "datosAdult_random".
+
+>Importante: Al ser datos random cada vez, el número de reglas y la precisión, pueden llegar a cambiar con respecto a los valores anotados (sin embargo la variación debe ser poca)
+
+```{r}
+set.seed(1)
+datosAdult_random <- datosAdult[sample(nrow(datosAdult)),]
+```
+
+>Para la futura evaluación del árbol de decisión, es necesario dividir el conjunto de datos en un conjunto de entrenamiento y un conjunto de prueba. El conjunto de entrenamiento es el subconjunto del conjunto original de datos utilizado para construir un primer modelo; y el conjunto de prueba, el subconjunto del conjunto original de datos utilizado para evaluar la calidad del modelo. 
+
+>Lo más correcto será utilizar un conjunto de datos diferente del que utilizamos para construir el árbol, es decir, un conjunto diferente del de entrenamiento. No hay ninguna proporción fijada con respecto al número relativo de componentes de cada subconjunto, pero la más utilizada acostumbra a ser 2/3 para el conjunto de entrenamiento y 1/3, para el conjunto de prueba. 
+
+>La variable por la que clasificaremos es el campo de income, que está en la columna 11.
+
+```{r}
+set.seed(666)
+yy <- datosAdult_random[,11] 
+Xx <- datosAdult_random[,1:10]
+```
+
+
+>Podemos elegir el subconjunto de entrenamiento y de prueba de diversas maneras. La primer opción consiste en calcular a cuántas filas corresponde dos tercios de los datos (2*32561/3=21707) y dividir "manualmente" el conjunto.
+>Igualmente si disminuimos o aumentamos el subconjunto podemos obtener distintos resultados, pero si elegimos un subconjunto muy pequeño o uno muy grande corremos el riesgo de hacer un under fitting del modelo si el subconjunto es pequeño, es decir que lo podemos sobre simplificar y por tanto tener poca precisión y si el subconjunto de entrenamiento es muy grande, sería un over fitting el cual se ajustaría mucho a esta realidad pero nuevas entradas que no se parezcan no las podrá predecir correctamente.
+>Para el primer ejemplo vamos con 2/3 del conjunto total.
+
+```{r}
+trainXx <- Xx[1:21707,]
+trainyy <- yy[1:21707]
+testXx <- Xx[21708:32561,]
+testyy <- yy[21708:32561]
+```
+
+>En la segunda opción podemos crear directamente un rango.
+>Sin embargo, al no ser un número entero exacto, los resultados entre la opción 1 y 2 son ligeramnete diferentes, dando un poco menos de precisión con el método 2.
+
+```{r}
+indexess = sample(1:nrow(datosAdult), size=floor((2/3)*nrow(datosAdult)))
+trainXx<-Xx[indexess,]
+trainyy<-yy[indexess]
+testXx<-Xx[-indexess,]
+testyy<-yy[-indexess]
+```
+
+>Después de una extracción aleatoria de casos es altamente recomendable efectuar un análisis de datos mínimo para asegurarnos de no obtener clasificadores sesgados por los valores que contiene cada muestra. 
+
+## Creación del modelo, calidad del modelo y extracción de reglas
+
+>Se crea el árbol de decisión usando los datos de entrenamiento:
+
+```{r}
+
+model2 <- C50::C5.0(trainXx, trainyy,rules=TRUE )
+
+summary(model2)
+```
+
+>Errors muestra el número y porcentaje de casos mal clasificados en el subconjunto de entrenamiento. El árbol obtenido clasifica erróneamente 3407 de los 21707 casos dados, una tasa de error del 15.7%.
+
+>A partir del árbol de decisión que hemos modelado, se pueden extraer las siguientes reglas de decisión (gracias a rules=TRUE podemos imprimir las reglas directamente):
+
+>Ejemplo de como interpretarlas:
+
+>workclass = Private
+	occupation en {Exec-managerial, Handlers-cleaners, Other-service,
+                       Protective-serv, Sales, Tech-support}
+	relationship en {Other-relative, Own-child}
+	->  class (income) <=50K  98.8% de validez.
+
+>Podemmos concluir lo siguiente: Si trabajas en una institución privada, tienes entre 40 y 60 años, estás casado, eres hombre, trabajas más de 40 horas, tienes un grado de educación alto, eres ejecutivo, vienes de un país de primer mundo y eres blanco, tendrás un salario alto.
+
+>A continuación mostramos el árbol obtenido. El cual por el número de opciones/nodos, no es claramente observado.
+
+```{r message= FALSE, warning=FALSE}
+model2 <- C50::C5.0(trainXx, trainyy)
+
+model2
+```
+
+>Para este ejemplo en particular, el gráfico del arbol de decisión utilizando plot que a su vez utiliza C50, no es muy comprensible y no hay muchos parámetros que nos puedan ayudar. Al ser de tamaño 96, no se alcanza a apreciacr correctamente y por esto he decidido solo mostrar sus características.
+>Sin embargo,
+>a continuación, un ejemplo de cómo se podría ver utilizando otras librerías (el ejemplo es solo eso, un ejemplo, no se desarrolla más que la propia visualización) no he querido aplicar otras librerías para apegarme lo más posible al ejemplo original con los datos del Titanic.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# Load rpart and rpart.plot
+library(rpart)
+library(rpart.plot)
+
+# Create a decision tree model
+tree <- rpart(income~., data=datosAdult, cp=.02)
+# Visualize the decision tree with rpart.plot
+rpart.plot(tree, box.palette="RdBu", shadow.col="gray", nn=TRUE)
+
+```
+
+>Es solo un ejemplo, el verdadero modelo está en el árbol poco claro anterior pero es por limitaciones de la librería.
+
+## Validación del modelo con los datos reservados
+
+>Una vez tenemos el modelo, podemos comprobar su calidad prediciendo la clase para los datos de prueba que nos hemos reservado al principio. Que como podemos ver es bastante buena.
+
+```{r}
+predicted_model2 <- predict( model2, testXx, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model2 == testyy) / length(predicted_model2)))
+```
+
+>Cuando hay pocas clases (que es el caso actual), la calidad de la predicción se puede analizar mediante una matriz de confusión que identifica los tipos de errores cometidos. 
+
+```{r}
+mat_conf2<-table(testyy,Predicted=predicted_model2)
+mat_conf2
+```
+
+>Otra manera de calcular el porcentaje de registros correctamente clasificados usando la matriz de confusión. La diagonal de superior izquierda a inferior derecha son los resultados correctamente detectados.
+>Arriba a la derecha son personas que en la predicción obtienen un salario alto pero en la realidad es bajo y en la esquina inferior izquierda tienen un salario bajo en la predicción pero en realidad es alto.
+>Aquí la pregunta es: Si tengo que basarme en esta predicción para otorgar un préstamo, qué es peor, negarlo a alguien que tiene el potencial suficiente para pagarlo u otorgarlo a quien no lo podrá pagar?
+>Tal vez lo mejor si ese es el caso es no otrorgarlo a quien lo podrá pagar, es decir, la esquina inferior izquierda.
+>En modelos reales debemos fijarnos en esta consideranción cuando hacemos predicciones para clasificaciones como es el caso.
+
+```{r}
+
+porcentaje_correct2<-100 * sum(diag(mat_conf2)) / sum(mat_conf2)
+print(sprintf("El %% de registros correctamente clasificados es: %.4f %%",porcentaje_correct2))
+
+```
+
+>Además, tenemos a nuestra disposición el paquete gmodels para obtener información más completa:
+
+
+```{r}
+library (gmodels)
+
+CrossTable(testyy, predicted_model2,prop.chisq  = FALSE, prop.c = FALSE, prop.r =FALSE,dnn = c('Reality', 'Prediction'))
+```
+
+******
+# Referencias
+******
+
+>Decision Tree, Wikipedia, (https://en.wikipedia.org/wiki/Decision_tree)
+>Confusion Matrix, Wikipedia, (https://en.wikipedia.org/wiki/Confusion_matrix)
+>Visualizing a decision tree using R packages in Explortory (2018), Kei Saito, (https://blog.exploratory.io/visualizing-a-decision-tree-using-r-packages-in-explortory-b26d4cb5e71f)
+>Plot a decision tree, (https://topepo.github.io/C5.0/reference/plot.C5.0.html)
+>C5.0 Classification Models (https://cran.r-project.org/web/packages/C50/vignettes/C5.0.html)
+>Top 5 advantages and disadvantages of Decision Tree Algorithm (2019), Dhiraj K, (https://medium.com/@dhiraj8899/top-5-advantages-and-disadvantages-of-decision-tree-algorithm-428ebd199d9a)
